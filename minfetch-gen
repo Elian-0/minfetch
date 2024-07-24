@@ -1,0 +1,168 @@
+#!/bin/sh
+
+fetchpath='minfetch'
+
+has() {
+	_cmd=$(command -v "$1") 2>/dev/null || return 1
+	[ -x "$_cmd" ] || return 1
+}
+
+
+
+osfetch() {
+    os=$(uname -s)
+#    echo "echo ' $os '" >> $fetchpath
+}
+
+distfetch() {
+    if command -v lsb_release &> /dev/null; then
+   	dist=$(lsb_release -sd | tr -d '"')
+    elif [-f /etc/os-release]; then
+   	dist=$(awk -F "=" '/PRETTY_NAME/ {print $2}' /etc/os-release | tr -d '"')
+    elif [-f /bedrock/cross]; then
+   	dist='bedrock linuc'
+    else
+   	dist=$os
+    fi
+
+    has crux && dist='CRUX'
+    has guix && dist='Guix System'
+
+#    echo "echo '$dist'" >> $fetchpath
+}
+
+hostfetch() {
+    host=$(cat /sys/devices/virtual/dmi/id/product_name)
+#    echo "echo '$host'" >> $fetchpath
+
+}
+
+kernalfetch() {
+    if command -v uname &> /dev/null; then
+   	kernal=$(uname -r)
+    elif command -v awk &> /dev/null; then
+   	kernal=$(awk '{print $3}' /proc/version)
+    else    
+
+
+    count=0
+    while read -r word; do
+   	((count++))
+   	if [ $count -eq 3 ]; then
+   		kernal=$word
+   		break
+   	fi
+    done < /proc/version
+
+    fi
+
+#    echo "echo '$kernal'" >> $fetchpath
+
+}
+
+memfetch() {
+    get_mem_value() {
+   	awk -v line="$1" '$1 == line {print $2}' /proc/meminfo
+    }
+    
+    # Memory and Swap calculations
+    MEM_TOTAL=$(get_mem_value MemTotal:)
+    SWAP_TOTAL=$(get_mem_value SwapTotal:)
+    
+    
+    echo "get_mem_value() {
+	awk -v line=\"\$1\" '\$1 == line {print \$2}' /proc/meminfo
+}
+
+# Memory and Swap calculations
+MEM=$MEM_TOTAL
+MEM_FREE=\$(get_mem_value MemFree:)
+SWAP=$SWAP_TOTAL
+SWAP_FREE=\$(get_mem_value SwapFree:)
+
+
+MEM_USED=\$(( (MEM - MEM_FREE) / 1024 ))
+MEM_TOTAL=\$(( MEM / 1024 ))
+SWAP_USED=\$(( (SWAP - SWAP_FREE) / 1024 ))
+SWAP_TOTAL=\$(( SWAP / 1024 ))" >> $fetchpath
+
+
+}
+
+
+pkgfetch() {
+    echo 'pkgs=$(' >> $fetchpath
+has bonsai && echo -n '(bonsai list) ' >> "$fetchpath"
+has crux && echo -n '(pkginfo -i) ' >> "$fetchpath"
+has pacman-key && echo -n '(pacman -Qq) ' >> "$fetchpath"
+has dpkg && echo -n '(dpkg-query -f ".\n" -W) ' >> "$fetchpath"
+has rpm && echo -n '(rpm -qa) ' >> "$fetchpath"
+has xbps-query && echo -n '(xbps-query -l) ' >> "$fetchpath"
+has apk && echo -n '(apk info) ' >> "$fetchpath"
+has guix && echo -n '(guix package --list-installed) ' >> "$fetchpath"
+has opkg && echo -n '(opkg list-installed) ' >> "$fetchpath"
+has kiss && echo -n '(printf "%s\n" /var/db/kiss/installed/*/) ' >> "$fetchpath"
+has cpt-list && echo -n '(printf "%s\n" /var/db/cpt/installed/*/) ' >> "$fetchpath"
+has brew && echo -n '(printf "%s\n" "$(brew --cellar)/"*) ' >> "$fetchpath"
+has emerge && echo -n '(printf "%s\n" /var/db/pkg/*/*/) ' >> "$fetchpath"
+has pkgtool && echo -n '(printf "%s\n" /var/log/packages/*) ' >> "$fetchpath"
+has eopkg && echo -n '(printf "%s\n" /var/lib/eopkg/package/*) ' >> "$fetchpath"
+has nix-store && printf '({\n\t\tnix-store -q --requisites /run/current-system/sw\n\t\tnix-store -q --requisites ~/.nix-profile\n\t}) ' >> "$fetchpath"
+    echo ' | wc -l)' >> $fetchpath
+}
+
+
+cpufetch(){
+  awk -F ":" '/model name/ {print $2}' /proc/cpuinfo | uniq
+  awk -F ":" '/processor/ {print $2}' /proc/cpuinfo | tail -n 1
+}
+
+color="
+cn='\033[0m'
+c1='\033[31m'
+c2='\033[32m'
+c3='\033[33m'
+c4='\033[34m'
+c5='\033[35m'
+c6='\033[36m'
+c7='\033[37m'
+c8='\033[38m'
+"
+art='ascii="
+
+
+
+  ${c1}     0 ${cn}bloat
+    are you happy?
+
+
+"'
+echo '#!/bin/sh' > $fetchpath
+osfetch
+distfetch
+hostfetch
+kernalfetch
+memfetch
+pkgfetch
+echo 'uptime=$(uptime -p | cut -c 3-)' >> $fetchpath
+echo 'hostname=$(hostname)' >> $fetchpath
+echo 'user=$(whoami)' >> $fetchpath
+echo "$color" >> $fetchpath
+echo "$art" >> $fetchpath
+echo 'echo -e "$ascii"
+printf "\033[10A \033[20C"' >> $fetchpath
+echo "output=\"" >> $fetchpath
+echo '
+				${c6}$user@$hostname' >> $fetchpath
+echo "			\${c4}OS:        \${cn}${dist}
+			\${c4}Host:      \${cn}${host}
+			\${c4}Kernel:    \${cn}${kernal}
+			\${c4}Uptime:   \${cn}\${uptime}
+			\${c4}Packages:  \${cn}\${pkgs}
+			\${c4}Memory:    \${cn}\${MEM_USED} / \${MEM_TOTAL} MB" >> $fetchpath
+#echo"   		\${c4}Swap:    \${cn}\${SWAP_USED} / \${SWAP_TOTAL} MB" >> $fetchpath
+echo "
+\"
+
+echo -e \"\$output\"
+" >> $fetchpath

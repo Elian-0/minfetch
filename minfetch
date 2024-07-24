@@ -1,0 +1,57 @@
+#!/bin/sh
+get_mem_value() {
+	awk -v line="$1" '$1 == line {print $2}' /proc/meminfo
+}
+
+# Memory and Swap calculations
+MEM=32573788
+MEM_FREE=$(get_mem_value MemFree:)
+SWAP=16383996
+SWAP_FREE=$(get_mem_value SwapFree:)
+
+
+MEM_USED=$(( (MEM - MEM_FREE) / 1024 ))
+MEM_TOTAL=$(( MEM / 1024 ))
+SWAP_USED=$(( (SWAP - SWAP_FREE) / 1024 ))
+SWAP_TOTAL=$(( SWAP / 1024 ))
+pkgs=$(
+(pacman -Qq)  | wc -l)
+uptime=$(uptime -p | cut -c 3-)
+hostname=$(hostname)
+user=$(whoami)
+
+cn='\033[0m'
+c1='\033[31m'
+c2='\033[32m'
+c3='\033[33m'
+c4='\033[34m'
+c5='\033[35m'
+c6='\033[36m'
+c7='\033[37m'
+c8='\033[38m'
+
+ascii="
+
+
+
+  ${c1}     0 ${cn}bloat
+    are you happy?
+
+
+"
+echo -e "$ascii"
+printf "\033[10A \033[20C"
+output="
+
+				${c6}$user@$hostname
+			${c4}OS:        ${cn}
+			${c4}Host:      ${cn}
+			${c4}Kernel:    ${cn}
+			${c4}Uptime:   ${cn}${uptime}
+			${c4}Packages:  ${cn}${pkgs}
+			${c4}Memory:    ${cn}${MEM_USED} / ${MEM_TOTAL} MB
+
+"
+
+echo -e "$output"
+
